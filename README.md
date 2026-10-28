@@ -99,18 +99,18 @@ SeaweedFS.
 
 | Profile | Services | Measured idle | Compose budget |
 |---|---|---|---|
-| `core` | Postgres, SeaweedFS, Lakekeeper, Trino, init jobs | ~0.9 GiB | ~4.9 GB |
-| `tools` | Python image for dlt, dbt, DuckDB, checks, generator | idle (exits) | 2 GB |
+| `core` | Postgres, SeaweedFS, Lakekeeper, Trino, init jobs | ~1.0 GiB | ~4.9 GB |
+| `tools` | Python image for dlt, dbt, DuckDB, checks, generator | idle (<1 MiB) | 2 GB |
 | `stream` | Kafka (KRaft), Kafka Connect/Debezium, Apicurio, Kafbat | ~1.5 GiB | ~3.9 GB |
-| `flink` | Flink JobManager + TaskManager | ~0.6 GiB | ~3.6 GB |
-| `orchestration` | Dagster webserver + daemon | ~0.5 GiB | ~1.8 GB |
-| `serving` | Valkey + FastAPI (+ `core`) | ~1.0 GiB | ~5.9 GB |
-| `observability` | Prometheus + Grafana | ~0.5 GiB | ~1.3 GB |
+| `flink` | Flink JobManager + TaskManager | ~0.5 GiB | ~3.6 GB |
+| `orchestration` | Dagster webserver + daemon | ~0.4 GiB | ~1.8 GB |
+| `serving` | Valkey + FastAPI (+ `core`) | ~1.1 GiB | ~5.9 GB |
+| `observability` | Prometheus + Grafana | ~0.4 GiB | ~1.3 GB |
 | `ml` | MLflow | ~1.7 GiB | 2 GB |
 
 Measured with `docker stats --no-stream` after startup and no active jobs. The
-whole stack idles at roughly 6 GiB. Compose memory limits are set per service so
-a single module cannot take the machine down; details are in `DECISIONS.md`.
+whole stack idles at roughly 5.5 GiB. Compose memory limits are set per service
+so a single module cannot take the machine down; details are in `DECISIONS.md`.
 
 ## Module map
 

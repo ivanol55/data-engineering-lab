@@ -123,7 +123,7 @@ in `DECISIONS.md`.
 | `ml` | MLflow | 2 GB |
 
 `make up P=core,stream` composes profiles. `make up P=all` starts everything.
-Measured idle is about 6 GiB; the limits above are ceilings, not reservations.
+Measured idle is about 5.5 GiB; the limits above are ceilings, not reservations.
 Starting `orchestration`, `serving`, or `ml` automatically includes `core`,
 because all three depend on Postgres and SeaweedFS.
 

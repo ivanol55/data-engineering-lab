@@ -209,20 +209,20 @@ are Compose `mem_limit`s, not reservations.
 
 | Profile | Measured idle | Compose budget | Notes |
 |---|---|---|---|
-| `core` | ~0.9 GiB | ~4.9 GiB | Trino ~0.70 GiB; Postgres ~0.11; SeaweedFS ~0.09; Lakekeeper ~0.03 |
-| `core` + `tools` | ~0.9 GiB | ~6.9 GiB | tools exits after `python --version`; checks add ~0.2 GiB while running |
-| `stream` | ~1.5 GiB | ~3.8 GiB | Kafka ~0.52 GiB; Connect ~0.41; Kafbat ~0.32; Apicurio ~0.23 |
-| `flink` | ~0.6 GiB | ~3.5 GiB | JobManager ~0.27 GiB; TaskManager ~0.34 |
-| `orchestration` | ~0.5 GiB | ~1.8 GiB | webserver ~0.22 GiB; daemon ~0.28 |
-| `serving` | ~1.0 GiB | ~5.9 GiB | API ~0.05 GiB; Valkey ~0.01 idle; `core` is added automatically |
-| `observability` | ~0.5 GiB | ~1.3 GiB | Grafana ~0.42 GiB; Prometheus ~0.06 |
+| `core` | ~1.0 GiB | ~4.9 GiB | Trino ~0.65 GiB; SeaweedFS ~0.20; Postgres ~0.13; Lakekeeper ~0.02 |
+| `core` + `tools` | ~1.0 GiB | ~6.9 GiB | tools idles at <1 MiB; checks add ~0.2 GiB while running |
+| `stream` | ~1.5 GiB | ~3.8 GiB | Kafka ~0.59 GiB; Connect ~0.39; Kafbat ~0.29; Apicurio ~0.23 |
+| `flink` | ~0.5 GiB | ~3.5 GiB | JobManager ~0.21 GiB; TaskManager ~0.26 |
+| `orchestration` | ~0.4 GiB | ~1.8 GiB | webserver ~0.22 GiB; daemon ~0.20 |
+| `serving` | ~1.1 GiB | ~5.9 GiB | API ~0.05 GiB; Valkey ~0.004 idle; `core` is added automatically |
+| `observability` | ~0.4 GiB | ~1.3 GiB | Grafana ~0.37 GiB; Prometheus ~0.06 |
 | `ml` | ~1.7 GiB | ~2.0 GiB | MLflow imports the full tracking stack; run with `--workers 1` |
 
-Measured with `docker stats --no-stream` after `make up`, no active jobs. The
-whole stack idles at roughly 6 GiB. "Compose budget" is the sum of `mem_limit`
-for the profile's concurrent services; it is a ceiling, not a reservation.
-One-shot jobs (`lakekeeper-migrate`, `lakehouse-init`) add up to ~1 GiB during
-startup but exit before steady state.
+Measured with `docker stats --no-stream` after `make up P=all`, no active jobs.
+The whole stack idles at roughly 5.5 GiB. "Compose budget" is the sum of
+`mem_limit` for the profile's concurrent services; it is a ceiling, not a
+reservation. One-shot jobs (`lakekeeper-migrate`, `lakehouse-init`) add up to
+~1 GiB during startup but exit before steady state.
 
 MLflow initially had a 1 GiB limit and four uvicorn workers; it was OOM-killed
 during startup. The lab now runs one worker and a 2 GiB limit, which idles at

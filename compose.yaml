@@ -171,6 +171,10 @@ services:
     profiles: ["tools"]
     user: "${LAB_UID:-1000}:${LAB_GID:-1000}"
     working_dir: /workspace
+    # `up` keeps this container idle; `docker compose run --rm tools ...`
+    # overrides the command for one-off work. Without a long-running command,
+    # `up --wait` treats a clean exit as a failed service.
+    command: ["sleep", "infinity"]
     env_file: [.env]
     environment:
       <<: *lab-env
