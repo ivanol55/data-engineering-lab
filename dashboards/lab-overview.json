@@ -1,0 +1,33 @@
+{
+  "uid": "de-lab-overview",
+  "title": "Data Engineering Lab",
+  "tags": ["lab", "module-08"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-15m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Module 8 starts here",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard is intentionally almost empty.\n\nModule 8 asks you to choose the signals that prove the pipeline is healthy: freshness, consumer lag, failed loads, decision latency, and the rate of blocks. Add the exporters and panels yourself; a dashboard that only shows `up` is not observability."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Prometheus targets up",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 6},
+      "targets": [
+        {"expr": "sum(up)", "refId": "A", "legendFormat": "targets"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"}
+    }
+  ]
+}

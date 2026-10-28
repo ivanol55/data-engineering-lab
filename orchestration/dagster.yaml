@@ -1,0 +1,27 @@
+# Dagster instance configuration for the local lab.
+# Module 3 owns the schedules and sensors; this file only makes the instance
+# durable and offline.
+telemetry:
+  enabled: false
+
+storage:
+  postgres:
+    postgres_db:
+      username:
+        env: DAGSTER_DB_USER
+      password:
+        env: DAGSTER_DB_PASSWORD
+      hostname: postgres
+      db_name:
+        env: DAGSTER_DB
+      port: 5432
+
+run_launcher:
+  module: dagster.core.launcher
+  class: DefaultRunLauncher
+
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /opt/dagster/home/compute_logs

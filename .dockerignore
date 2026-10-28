@@ -1,0 +1,7 @@
+.git
+.env
+state
+fixtures
+.pytest_cache
+**/__pycache__
+*.pyc

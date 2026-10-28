@@ -1,0 +1,522 @@
+name: ${COMPOSE_PROJECT_NAME:-de-lab}
+
+x-postgres-env: &postgres-env
+  POSTGRES_DB: ${POSTGRES_DB:-app}
+  POSTGRES_USER: ${POSTGRES_USER:-app}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+  LAKEKEEPER_DB: ${LAKEKEEPER_DB:-lakekeeper}
+  LAKEKEEPER_DB_USER: ${LAKEKEEPER_DB_USER:-lakekeeper}
+  LAKEKEEPER_DB_PASSWORD: ${LAKEKEEPER_DB_PASSWORD:-lakekeeper}
+  DAGSTER_DB: ${DAGSTER_DB:-dagster}
+  DAGSTER_DB_USER: ${DAGSTER_DB_USER:-dagster}
+  DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+  MLFLOW_DB: ${MLFLOW_DB:-mlflow}
+  MLFLOW_DB_USER: ${MLFLOW_DB_USER:-mlflow}
+  MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:-mlflow}
+
+x-lakekeeper-env: &lakekeeper-env
+  LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_ENCRYPTION_KEY:-lab-only-not-a-secret}
+  LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${LAKEKEEPER_DB_USER:-lakekeeper}:${LAKEKEEPER_DB_PASSWORD:-lakekeeper}@postgres:5432/${LAKEKEEPER_DB:-lakekeeper}
+  LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${LAKEKEEPER_DB_USER:-lakekeeper}:${LAKEKEEPER_DB_PASSWORD:-lakekeeper}@postgres:5432/${LAKEKEEPER_DB:-lakekeeper}
+  LAKEKEEPER__AUTHZ_BACKEND: allowall
+  # Every client (Trino, dlt, pyiceberg) talks to Lakekeeper over the compose
+  # network, so the catalog advertises the service name, not localhost.
+  LAKEKEEPER__BASE_URI: http://lakekeeper:8181
+  RUST_LOG: info
+
+x-lab-env: &lab-env
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGDATABASE: ${POSTGRES_DB:-app}
+  PGUSER: ${POSTGRES_USER:-app}
+  PGPASSWORD: ${POSTGRES_PASSWORD:-app}
+  TRINO_URL: http://trino:8080
+  TRINO_USER: ${TRINO_USER:-lab}
+  LAKEKEEPER_URL: http://lakekeeper:8181
+  LAKEKEEPER_WAREHOUSE: lakehouse
+  S3_ENDPOINT: http://seaweedfs:8333
+  S3_BUCKET: ${S3_BUCKET:-lakehouse}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-labadmin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-labadmin123}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  LAB_ROOT: /workspace
+  PYTHONPATH: /workspace:/workspace/generator
+  HOME: /workspace/state/home
+
+services:
+  postgres:
+    image: postgres:18.6
+    profiles: ["core"]
+    environment: *postgres-env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./compose/init/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    mem_limit: 512m
+    networks: [lab]
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51
+    profiles: ["core"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat >/tmp/s3.json <<EOF
+        {"identities":[{"name":"lab-admin","credentials":[{"accessKey":"${S3_ACCESS_KEY:-labadmin}","secretKey":"${S3_SECRET_KEY:-labadmin123}"}],"actions":["Admin","Read","Write"]}]}
+        EOF
+        exec /entrypoint.sh server -dir=/data -ip=seaweedfs -ip.bind=0.0.0.0 \
+          -master.port=9333 -volume.port=8080 -filer.port=8888 \
+          -master.volumeSizeLimitMB=1024 -s3 -s3.config=/tmp/s3.json \
+          -s3.port=8333 -s3.port.iceberg=0
+    ports:
+      - "${SEAWEEDFS_S3_PORT:-8333}:8333"
+      - "${SEAWEEDFS_MASTER_PORT:-9333}:9333"
+    volumes:
+      - seaweedfs:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8333/ | grep -qE '^(200|403)$'",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    mem_limit: 768m
+    networks: [lab]
+
+  lakekeeper-migrate:
+    image: quay.io/lakekeeper/catalog:v0.14.2
+    profiles: ["core"]
+    command: ["migrate"]
+    environment: *lakekeeper-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    mem_limit: 256m
+    networks: [lab]
+
+  lakekeeper:
+    image: quay.io/lakekeeper/catalog:v0.14.2
+    profiles: ["core"]
+    command: ["serve"]
+    environment: *lakekeeper-env
+    ports:
+      - "${LAKEKEEPER_PORT:-8181}:8181"
+    depends_on:
+      lakekeeper-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    mem_limit: 512m
+    networks: [lab]
+
+  lakehouse-init:
+    image: de-lab-tools:local
+    profiles: ["core"]
+    user: "0:0"
+    command: ["python", "/workspace/compose/init/lakehouse_init.py"]
+    environment:
+      <<: *lab-env
+      PYTHONPATH: /workspace:/workspace/generator
+    volumes:
+      - .:/workspace:ro
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+      lakekeeper:
+        condition: service_healthy
+    restart: "no"
+    mem_limit: 768m
+    networks: [lab]
+
+  trino:
+    image: trinodb/trino:484
+    profiles: ["core"]
+    ports:
+      - "${TRINO_PORT:-8085}:8080"
+    volumes:
+      - ./compose/trino/catalog:/etc/trino/catalog:ro
+      - ./compose/trino/etc/config.properties:/etc/trino/config.properties:ro
+      - ./compose/trino/etc/jvm.config:/etc/trino/jvm.config:ro
+    depends_on:
+      lakehouse-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/lib/trino/bin/health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 3g
+    networks: [lab]
+
+  tools:
+    image: de-lab-tools:local
+    profiles: ["tools"]
+    user: "${LAB_UID:-1000}:${LAB_GID:-1000}"
+    working_dir: /workspace
+    env_file: [.env]
+    environment:
+      <<: *lab-env
+      PYTHONPATH: /workspace:/workspace/generator
+    volumes:
+      - .:/workspace
+    stdin_open: true
+    tty: true
+    mem_limit: 2g
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # stream: Kafka, schema registry, CDC and a Kafka UI
+  # -------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:4.4.0
+    profiles: ["stream"]
+    environment:
+      CLUSTER_ID: de-lab-kraft-cluster
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "${KAFKA_HOST_PORT:-29092}:29092"
+    volumes:
+      - kafka:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/9092'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    mem_limit: 1536m
+    networks: [lab]
+
+  apicurio:
+    image: quay.io/apicurio/apicurio-registry:3.3.3
+    profiles: ["stream"]
+    ports:
+      - "${APICURIO_PORT:-8086}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    mem_limit: 768m
+    networks: [lab]
+
+  kafka-connect:
+    image: quay.io/debezium/connect:3.7.0.Final
+    profiles: ["stream"]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: de-lab-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: /kafka/connect
+    ports:
+      - "${KAFKA_CONNECT_PORT:-8083}:8083"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8083'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 1024m
+    networks: [lab]
+
+  kafbat:
+    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    profiles: ["stream"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: lab
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "${KAFBAT_PORT:-8081}:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    mem_limit: 512m
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # flink: stateful stream processing (module 6)
+  # -------------------------------------------------------------------------
+  flink-jobmanager:
+    image: flink:2.3.0
+    profiles: ["flink"]
+    command: ["jobmanager"]
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.memory.process.size: 1024m
+        parallelism.default: 2
+    ports:
+      - "${FLINK_PORT:-8082}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8081'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    mem_limit: 1536m
+    networks: [lab]
+
+  flink-taskmanager:
+    image: flink:2.3.0
+    profiles: ["flink"]
+    command: ["taskmanager"]
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1536m
+        parallelism.default: 2
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    mem_limit: 2048m
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # orchestration: Dagster (module 3)
+  # -------------------------------------------------------------------------
+  dagster-webserver:
+    image: de-lab-orchestration:local
+    profiles: ["orchestration"]
+    command:
+      [
+        "dagster-webserver",
+        "-h",
+        "0.0.0.0",
+        "-p",
+        "3000",
+        "-w",
+        "/opt/dagster/home/workspace.yaml",
+      ]
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_DB: ${DAGSTER_DB:-dagster}
+      DAGSTER_DB_USER: ${DAGSTER_DB_USER:-dagster}
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+    ports:
+      - "${DAGSTER_PORT:-3002}:3000"
+    volumes:
+      - .:/workspace:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/server_info', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 1024m
+    networks: [lab]
+
+  dagster-daemon:
+    image: de-lab-orchestration:local
+    profiles: ["orchestration"]
+    command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_DB: ${DAGSTER_DB:-dagster}
+      DAGSTER_DB_USER: ${DAGSTER_DB_USER:-dagster}
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+    volumes:
+      - .:/workspace:ro
+    depends_on:
+      dagster-webserver:
+        condition: service_healthy
+    mem_limit: 768m
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # serving: Valkey + decision API (modules 6 and 7)
+  # -------------------------------------------------------------------------
+  valkey:
+    image: valkey/valkey:9.0.7
+    profiles: ["serving"]
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    networks: [lab]
+
+  api:
+    image: de-lab-api:local
+    profiles: ["serving"]
+    environment:
+      VALKEY_URL: redis://valkey:6379/0
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-app}
+      PGUSER: ${POSTGRES_USER:-app}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-app}
+    ports:
+      - "${API_PORT:-8001}:8000"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    mem_limit: 512m
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # observability: Prometheus + Grafana (module 8)
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./compose/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    mem_limit: 768m
+    networks: [lab]
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-labadmin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./compose/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    mem_limit: 512m
+    networks: [lab]
+
+  # -------------------------------------------------------------------------
+  # ml: experiment tracking and model registry (module 9)
+  # -------------------------------------------------------------------------
+  mlflow:
+    image: de-lab-mlflow:local
+    profiles: ["ml"]
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://${MLFLOW_DB_USER:-mlflow}:${MLFLOW_DB_PASSWORD:-mlflow}@postgres:5432/${MLFLOW_DB:-mlflow}
+      - --artifacts-destination
+      - s3://${S3_BUCKET:-lakehouse}/mlflow
+      - --serve-artifacts
+      - --workers
+      - "1"
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-labadmin}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-labadmin123}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      MLFLOW_S3_ENDPOINT_URL: http://seaweedfs:8333
+    ports:
+      - "${MLFLOW_PORT:-5001}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    mem_limit: 2g
+    networks: [lab]
+
+volumes:
+  pgdata:
+  seaweedfs:
+  kafka:
+  valkey:
+  prometheus:
+  grafana:
+
+networks:
+  lab:
+    name: ${COMPOSE_PROJECT_NAME:-de-lab}_lab
