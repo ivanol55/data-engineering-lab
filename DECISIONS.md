@@ -132,6 +132,28 @@ DuckDB's Iceberg attach uses the legacy S3 settings (`s3_endpoint`,
 `s3_access_key_id`, ...). The named-secret path did not pass credentials to the
 Iceberg extension for `s3://` metadata reads.
 
+### Service-specific notes
+
+- **Kafka** runs one KRaft broker with replication factor 1. It is a lab, not a
+  durability reference. The host listener is `localhost:29092`; containers use
+  `kafka:9092`.
+- **Apicurio Registry** uses its embedded H2 storage by default. Its health
+  endpoint is on the management port, `9000/health`, not `8080/health`. The
+  registry is disposable with the container.
+- **Kafka Connect** is the Debezium image with JSON converters and
+  single-replica internal topics. Module 5 changes the connector, not the image.
+- **Flink** runs one JobManager and one TaskManager with two slots. Module 6
+  owns checkpointing; the profile itself does not configure a durable
+  checkpoint path.
+- **Dagster** uses the custom `de-lab-orchestration:local` image because the
+  official 1.13 images are not published. The daemon and webserver share the
+  `dagster` Postgres database.
+- **Grafana** allows anonymous read and creates an admin from
+  `GRAFANA_USER`/`GRAFANA_PASSWORD`. It is provisioned with one Prometheus
+  datasource and one starter dashboard.
+- **MLflow** runs one uvicorn worker. The default four workers needed more than
+  1 GiB just to start and were OOM-killed; one worker idles at ~1.7 GiB.
+
 ## Data decisions
 
 ### Deterministic generator
