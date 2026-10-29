@@ -13,7 +13,7 @@ ENV DAGSTER_HOME=/opt/dagster/home \
     PYTHONPATH=/workspace:/workspace/generator:/opt/dagster/home
 
 RUN mkdir -p /opt/dagster/home/compute_logs /workspace
-COPY orchestration/dagster.yaml orchestration/workspace.yaml orchestration/definitions.py /opt/dagster/home/
+COPY orchestration/dagster.yaml orchestration/workspace.yaml /opt/dagster/home/
 
 WORKDIR /workspace
 CMD ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]

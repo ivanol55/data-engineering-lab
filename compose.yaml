@@ -47,6 +47,16 @@ services:
   postgres:
     image: postgres:18.6
     profiles: ["core"]
+    # Module 5 needs logical replication. These settings are safe for a lab and
+    # are applied on every container start, including an existing volume.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
     environment: *postgres-env
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -273,7 +283,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       DYNAMIC_CONFIG_ENABLED: "true"
     ports:
-      - "${KAFBAT_PORT:-8081}:8080"
+      - "${KAFBAT_PORT:-8087}:8080"
     depends_on:
       kafka:
         condition: service_healthy
@@ -284,14 +294,19 @@ services:
   # flink: stateful stream processing (module 6)
   # -------------------------------------------------------------------------
   flink-jobmanager:
-    image: flink:2.3.0
+    image: de-lab-flink:local
     profiles: ["flink"]
     command: ["jobmanager"]
     environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      VALKEY_URL: redis://valkey:6379/0
+      PYTHONPATH: /workspace
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.memory.process.size: 1024m
         parallelism.default: 2
+    volumes:
+      - .:/workspace:ro
     ports:
       - "${FLINK_PORT:-8082}:8081"
     healthcheck:
@@ -304,15 +319,20 @@ services:
     networks: [lab]
 
   flink-taskmanager:
-    image: flink:2.3.0
+    image: de-lab-flink:local
     profiles: ["flink"]
     command: ["taskmanager"]
     environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      VALKEY_URL: redis://valkey:6379/0
+      PYTHONPATH: /workspace
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 2
         taskmanager.memory.process.size: 1536m
         parallelism.default: 2
+    volumes:
+      - .:/workspace:ro
     depends_on:
       flink-jobmanager:
         condition: service_healthy
@@ -340,6 +360,11 @@ services:
       DAGSTER_DB: ${DAGSTER_DB:-dagster}
       DAGSTER_DB_USER: ${DAGSTER_DB_USER:-dagster}
       DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+      # The repo is mounted read-only. dlt state and dbt scratch files must
+      # live somewhere writable so assets can run from the webserver/daemon.
+      DLT_STATE_DIR: /tmp/de-lab/dlt
+      DBT_TARGET_PATH: /tmp/de-lab/dbt/target
+      DBT_LOG_PATH: /tmp/de-lab/dbt/logs
     ports:
       - "${DAGSTER_PORT:-3002}:3000"
     volumes:
@@ -369,6 +394,9 @@ services:
       DAGSTER_DB: ${DAGSTER_DB:-dagster}
       DAGSTER_DB_USER: ${DAGSTER_DB_USER:-dagster}
       DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+      DLT_STATE_DIR: /tmp/de-lab/dlt
+      DBT_TARGET_PATH: /tmp/de-lab/dbt/target
+      DBT_LOG_PATH: /tmp/de-lab/dbt/logs
     volumes:
       - .:/workspace:ro
     depends_on:
@@ -401,6 +429,9 @@ services:
     profiles: ["serving"]
     environment:
       VALKEY_URL: redis://valkey:6379/0
+      KAFKA_BOOTSTRAP: kafka:9092
+      DECISION_TOPIC: login.decisions
+      LAB_ALLOW_FAULT_INJECTION: "1"
       PGHOST: postgres
       PGPORT: "5432"
       PGDATABASE: ${POSTGRES_DB:-app}
@@ -427,6 +458,22 @@ services:
   # -------------------------------------------------------------------------
   # observability: Prometheus + Grafana (module 8)
   # -------------------------------------------------------------------------
+  exporter:
+    image: de-lab-exporter:local
+    profiles: ["observability"]
+    environment:
+      <<: *lab-env
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_CONNECT_URL: http://kafka-connect:8083
+      EXPORTER_PORT: "9101"
+    ports:
+      - "${EXPORTER_PORT:-9101}:9101"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 512m
+    networks: [lab]
+
   prometheus:
     image: prom/prometheus:v3.15.1
     profiles: ["observability"]
@@ -438,6 +485,7 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./compose/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./compose/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus:/prometheus
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null"]
@@ -488,11 +536,32 @@ services:
       - --serve-artifacts
       - --workers
       - "1"
+      # The training and check containers reach the server as `mlflow:5000`.
+      # MLflow rejects unknown Host headers by default (DNS-rebinding guard).
+      - --allowed-hosts
+      - ${MLFLOW_ALLOWED_HOSTS:-localhost,localhost:5000,localhost:5001,127.0.0.1,127.0.0.1:5000,mlflow,mlflow:5000}
     environment:
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-labadmin}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-labadmin123}
       AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
       MLFLOW_S3_ENDPOINT_URL: http://seaweedfs:8333
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTHONPATH: /workspace:/workspace/generator
+      LAB_ROOT: /workspace
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-lakehouse}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-labadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-labadmin123}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      LAKEKEEPER_URL: http://lakekeeper:8181
+      LAKEKEEPER_WAREHOUSE: lakehouse
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-app}
+      PGUSER: ${POSTGRES_USER:-app}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-app}
+    volumes:
+      - .:/workspace:ro
     ports:
       - "${MLFLOW_PORT:-5001}:5000"
     depends_on:

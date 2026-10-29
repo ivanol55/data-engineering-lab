@@ -84,12 +84,18 @@ def reset_tables() -> None:
     print("cleared dlt state")
 
 
-def run(names: list[str]) -> dlt.Pipeline:
+def run(names: list[str], event_date: str | None = None) -> dlt.Pipeline:
     unknown = set(names) - set(RESOURCES)
     if unknown:
         raise SystemExit(f"unknown resources: {', '.join(sorted(unknown))}")
     pipeline = make_pipeline()
-    resources = [RESOURCES[name]() for name in names]
+    resources = []
+    for name in names:
+        factory = RESOURCES[name]
+        if name == "events" and event_date is not None:
+            resources.append(factory(event_date=event_date))
+        else:
+            resources.append(factory())
     info = pipeline.run(resources)
     print(info)
     if not info.has_failed_jobs:

@@ -1,0 +1,8 @@
+# Table catalogue (module 8).
+#
+# TODO(learner): every table the lab owns needs an owner, a grain, a retention
+# period, its PII columns, and its upstream dependencies. An empty catalogue is
+# not a catalogue: `make check M=8` rejects it.
+version: 1
+owner_team: TODO
+tables: {}

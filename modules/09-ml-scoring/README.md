@@ -1,10 +1,6 @@
 # Module 9 — ML scoring
 
-**Time:** 4–6 hours. **Profile:** `ml` + `core`. **Status:** scaffold.
-
-> MLflow starts with the `ml` profile and stores runs in Postgres with artifacts
-> in SeaweedFS. No training code, feature pipeline, exercises, or checks exist
-> yet.
+**Time:** 4–6 hours. **Profile:** `ml` + `core`.
 
 ## Goal
 
@@ -25,27 +21,42 @@ By the end you should have:
 
 - MLflow 3.17.2 on <http://localhost:5001>, backed by the `mlflow` Postgres
   database and `s3://lakehouse/mlflow` for artifacts.
+- `ml/features.py`: point-in-time features built from `fixtures/events`. It
+  reads the fixtures directly, so the exercise does not depend on the learner
+  state of modules 1 and 2.
+- `ml/train.py`: the logistic-regression pipeline, the rule baseline, and the
+  MLflow run. The learner decisions are in `ml/config.py`.
+- `ml/score.py`: the serving path and the shadow comparison.
+- `ml/promotion.md`: the rollout plan. It is a placeholder on `main`.
 - The batch tables and, after module 2, the marts. `fct_login_events` already
   contains the outcome and the `is_attack` label.
 - The decision service from module 7, which can call a model or stay on rules.
 
-## What you will build
+## Your task
 
-1. Define the label and the prediction moment. "Was this login an attack?" is
-   only usable if every feature is known before the decision.
-2. Build point-in-time features: user status at the time, prior failure count,
-   IP reputation at the time, travel velocity. Join on time ranges, not on the
-   current dimension row.
-3. Split by time, not randomly. A random split puts future behaviour in the
-   training set and inflates the metric.
-4. Train a baseline (logistic regression or a small tree model) and compare it
-   with the module 7 rules on the same holdout.
-5. Log the run to MLflow, register the model, and record the feature list and
-   the training window as metadata.
-6. Score in shadow mode: log the model decision next to the rule decision
-   without changing the response.
-7. Choose a promotion rule and a rollback rule. Measure latency and the
-   block-rate change, not only AUC.
+Start the profiles:
+
+```bash
+make up P=core,ml
+```
+
+Fix the decisions in `ml/config.py`, then retrain and run the check:
+
+```bash
+make check M=9
+```
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `SPLIT_STRATEGY` | `"random"` | the holdout shares users and campaigns with training |
+| `INCLUDE_CURRENT_EVENT` | `True` | `prior_failures` includes the outcome being predicted |
+| `LOG_TO_MLFLOW` | `False` | the run cannot be compared, reproduced or promoted |
+| `REGISTER_MODEL` | `False` | the model cannot be served by version |
+| `SHADOW_MODE` | `False` | the model decision is never compared with the rules |
+
+The reference values are `"time"`, `False`, `True`, `True` and `True`. The
+check trains once, then verifies the feature table, the chronological split,
+the MLflow run and registry, the shadow score, and `ml/promotion.md`.
 
 ## Decisions to make yourself
 
@@ -71,9 +82,10 @@ open http://localhost:5001
   event time.
 - The time-based holdout is later than every training row.
 - The MLflow run records the data window, the feature list, and the seed.
+- The latest registered `login-risk` version points at the run just trained.
 - Shadow scoring produces both decisions for the same request.
 - The promotion and rollback rules are written down and testable.
-- `make check M=9` exists and fails on `main`, passes on `solutions`.
+- `make check M=9` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

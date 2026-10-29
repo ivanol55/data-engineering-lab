@@ -1,9 +1,6 @@
 # Module 6 — Flink stream processing
 
-**Time:** 4–5 hours. **Profile:** `stream` + `flink` + `serving`. **Status:** scaffold.
-
-> Flink JobManager and TaskManager start with the `flink` profile. No job,
-> exercise, or check exists yet.
+**Time:** 4–5 hours. **Profile:** `stream` + `flink` + `serving`.
 
 ## Goal
 
@@ -23,7 +20,10 @@ By the end you should have:
 ## What already exists
 
 - Flink 2.3.0, one JobManager and one TaskManager with two slots.
-- Kafka from module 4. You need to produce events and create the intel topic.
+- Kafka from module 4. Module 6 creates a JSON mirror topic (`login.events.json`)
+  because Flink's Kafka connector reads JSON without a custom Avro deserialiser.
+- `flink_jobs/risk_job.py` computes five-minute windows; `flink_jobs/setup.py`
+  creates the topics and produces the fixtures.
 - Valkey from the `serving` profile, if you choose it as a sink.
 - The batch tables in Iceberg for a correctness comparison: a streaming result
   should agree with the batch result for the same window.
@@ -32,16 +32,36 @@ By the end you should have:
 
 1. A source with event-time timestamps and a watermark strategy. Justify the
    out-of-orderness bound using the generator's behaviour.
-2. A windowed aggregation: failures per user in the last N minutes, distinct
-   source IPs per user, or velocity between countries.
-3. A keyed process function with state. Decide the state TTL; unbounded state is
-   a memory leak with a nice API.
-4. A temporal join with threat intel. A regular join multiplies rows when the
-   feed revises an indicator; decide how to keep one current version.
-5. A sink to Valkey (low latency, overwrite) or Kafka (durable, replayable).
-   Explain the delivery guarantee at the sink.
-6. Checkpointing with a local filesystem or S3 path. Kill the TaskManager and
-   show that the job recovers.
+2. A five-minute tumbling window with event counts, failures, distinct users
+   and maximum risk. The check compares one window with a batch aggregation of
+   the fixtures.
+3. A state TTL for the keyed aggregation. Unbounded state is a memory leak with
+   a nice API.
+4. A Kafka sink for the window result. Explain what the sink duplicates when a
+   window is retracted or the job restarts.
+5. Checkpointing to a durable path. The check reads the completed checkpoint
+   count from the Flink REST API.
+6. Stretch: a temporal join with threat intel, and a sink to Valkey.
+
+## Your task
+
+Edit `flink_jobs/config.py`, then reset, submit and check:
+
+```bash
+make up P=stream,flink
+python flink_jobs/setup.py reset
+python flink_jobs/setup.py setup
+docker compose --profile flink exec flink-jobmanager \
+  flink run -m flink-jobmanager:8081 -d -py /workspace/flink_jobs/risk_job.py
+make check M=6
+```
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `TIME_CHARACTERISTIC` | `processing` | windows follow wall-clock time, not event time |
+| `ALLOWED_LATENESS_SECONDS` | `0` | late events are silently dropped |
+| `STATE_TTL_HOURS` | `0` | keyed state grows forever |
+| `CHECKPOINTING` | `False` | a TaskManager restart loses state |
 
 ## Decisions to make yourself
 
@@ -64,12 +84,9 @@ docker compose --profile flink logs -f flink-taskmanager
 
 ## Done when
 
-- The job is `RUNNING` with a non-zero watermark.
-- A late event inside the allowed lateness changes the window result; one
-  outside it is dropped and visible in a metric.
-- A TaskManager restart resumes from the checkpoint without duplicating the
-  sink output.
-- The streaming result for a completed window matches the batch query.
+- The job is `RUNNING` and its output windows are keyed by event time.
+- The streaming result for a completed window matches the batch aggregation.
+- Checkpoints complete, and the state TTL and allowed lateness are non-zero.
 - `make check M=6` exists and fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch

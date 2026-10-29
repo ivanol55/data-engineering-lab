@@ -4,6 +4,7 @@ Usage:
     python exercises/run.py all
     python exercises/run.py users
     python exercises/run.py events
+    python exercises/run.py events --date 2026-09-03
     python exercises/run.py threat-intel
     python exercises/run.py reset
 """
@@ -33,12 +34,18 @@ COMMANDS = {
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=sorted(COMMANDS))
+    parser.add_argument(
+        "--date",
+        help="events only: load just this event date (YYYY-MM-DD)",
+    )
     args = parser.parse_args()
 
     if args.command == "reset":
         reset_tables()
         return 0
-    run(COMMANDS[args.command])
+    if args.date and args.command not in ("events", "all"):
+        parser.error("--date is only valid for `events` or `all`")
+    run(COMMANDS[args.command], event_date=args.date)
     return 0
 
 

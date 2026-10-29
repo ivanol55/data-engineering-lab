@@ -23,7 +23,7 @@ ways real data engineering is hard.
                          │  raw.users                       │
                          │  raw.login_events  (day partition)│
                          │  raw.threat_intel                │
-                         │  staging / marts (later modules) │
+                         │  staging / marts (module 2)      │
                          └───────────────┬──────────────────┘
                                          │
               ┌──────────────────────────┼──────────────────────────┐
@@ -53,6 +53,7 @@ the batch contracts established in module 1.
 | FastAPI | local | Decision API | stateless |
 | Prometheus / Grafana | 3.15.1 / 13.2.5 | Metrics and dashboards | volumes |
 | MLflow | 3.17.2 | Experiment tracking and model registry | Postgres + S3 |
+| exporter | local | Iceberg freshness, row counts, Kafka lag, Connect task state | stateless |
 
 All images are pinned. Licences and multi-arch checks are in `DECISIONS.md`.
 
@@ -92,7 +93,7 @@ Everything runs on the Compose network `de-lab_lab`. Host ports are in `.env`:
 | Kafka external listener | 29092 | 9092 |
 | Debezium Connect | 8083 | 8083 |
 | Apicurio | 8086 | 8080 |
-| Kafbat | 8081 | 8080 |
+| Kafbat | 8087 | 8080 |
 | Flink UI | 8082 | 8081 |
 | Dagster | 3002 | 3000 |
 | Valkey | 6379 | 6379 |

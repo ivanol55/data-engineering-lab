@@ -43,14 +43,16 @@ The MLflow tag is the upstream reference. The lab builds
 `de-lab-mlflow:local` from the same version so boto3/botocore stay on the
 pinned versions above and the image does not drift from the tools image.
 
-The lab builds four images locally:
+The lab builds six images locally:
 
 | Image | Base | Contents |
 |---|---|---|
 | `de-lab-tools:local` | `python:3.12.16-slim-bookworm` | dlt, pyiceberg, DuckDB, dbt, pytest, generator |
 | `de-lab-orchestration:local` | `de-lab-tools:local` | Dagster 1.13.27 + webserver + Postgres storage |
 | `de-lab-api:local` | `python:3.12.16-slim-bookworm` | FastAPI, uvicorn, redis, psycopg |
-| `de-lab-mlflow:local` | `python:3.12.16-slim-bookworm` | MLflow 3.17.2, boto3, psycopg |
+| `de-lab-mlflow:local` | `python:3.12.16-slim-bookworm` | MLflow 3.17.2, boto3, psycopg, scikit-learn |
+| `de-lab-flink:local` | `flink:2.3.0` | PyFlink and a `python` symlink for the module 6 job |
+| `de-lab-exporter:local` | `de-lab-tools:local` | Module 8 Prometheus exporter for Iceberg, Kafka and Connect |
 
 Dagster does not publish a maintained 1.13 image, so it is built on top of the
 tools image and inherits the same pins. `dagster-postgres 0.29.27` pulled
@@ -153,6 +155,9 @@ Iceberg extension for `s3://` metadata reads.
   datasource and one starter dashboard.
 - **MLflow** runs one uvicorn worker. The default four workers needed more than
   1 GiB just to start and were OOM-killed; one worker idles at ~1.7 GiB.
+  MLflow 3.x rejects unknown `Host` headers as a DNS-rebinding guard. Compose
+  passes `--allowed-hosts` with `mlflow:5000`, because the training and check
+  containers address the server by service name, not `localhost`.
 
 ## Data decisions
 
@@ -213,8 +218,10 @@ partition creation, but not partition evolution (changing the spec later).
 
 ## Checks
 
-- `make check M=<n>` starts `core`, runs pytest inside the tools image, and
-  exits non-zero on failure.
+- `make check M=<n>` starts the profiles the module needs, runs pytest inside
+  the matching container, and exits non-zero on failure. Modules 3, 6 and 9
+  run inside Dagster, Flink and MLflow respectively because those images carry
+  the module's dependencies.
 - Module 0 checks the environment and that `answers.md` has no TODO
   placeholders. Module 1 checks behaviour, not source text: it mutates Postgres,
   reruns the pipeline, adds a day of events, and inspects Iceberg.
@@ -252,13 +259,17 @@ during startup. The lab now runs one worker and a 2 GiB limit, which idles at
 
 ## Known limitations
 
-- Modules 2–9 are README-only scaffolds. Their Compose profiles and pinned
-  images exist, but exercises, pipelines, and checks do not.
 - No authentication or TLS anywhere. This is a laptop lab; do not expose it.
 - SeaweedFS runs as a single node. It is not a durability or HA reference.
 - dlt's Iceberg writer does not support partition evolution.
 - The event cursor does not handle late data; that is module 6's problem.
 - The generator's `is_attack` label is a teaching aid. A real system would
-  derive risk from behaviour and intel, not read a ground-truth column.
-- The FastAPI, Dagster, and MLflow services are placeholders until their modules
-  are implemented.
+  derive risk from behaviour and intel, not read a ground-truth column. Module
+  9 keeps the label so the pipeline can be taught, and documents the leakage
+  caveat in `ml/promotion.md`.
+- The streaming path is at-least-once. Module 4 makes the sink idempotent;
+  module 6 checkpoints state but does not claim end-to-end exactly-once.
+- The model in module 9 is a logistic regression over fixture features. The
+  course grades the pipeline around it, not model quality.
+- `make check M=6` can take several minutes because it waits for a Flink
+  window to close when no events match the current time.

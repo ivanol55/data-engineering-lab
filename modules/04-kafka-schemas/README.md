@@ -1,10 +1,6 @@
 # Module 4 — Kafka and schemas
 
-**Time:** 3–4 hours. **Profile:** `stream`. **Status:** scaffold.
-
-> Kafka, Apicurio, Kafbat, and Debezium Connect start with the `stream`
-> profile. Topics, schemas, producers, consumers, exercises, and checks are not
-> written yet.
+**Time:** 3–4 hours. **Profile:** `stream`.
 
 ## Goal
 
@@ -27,10 +23,12 @@ By the end you should have:
   and internal listener on `kafka:9092`.
 - Apicurio Registry 3.3.3 on <http://localhost:8086>, using its embedded H2
   store. It is a lab registry, not a durable production one.
-- Kafbat UI on <http://localhost:8081>.
+- Kafbat UI on <http://localhost:8087>.
 - Debezium Connect on <http://localhost:8083> for module 5.
 - The deterministic generator can produce the same events as the fixtures, so
   replay tests are repeatable.
+- `streaming/run.py` has `reset`, `setup`, `produce` and `consume` commands;
+  the sink is a JSONL file under `state/` so replays survive a container.
 
 Start with:
 
@@ -38,6 +36,9 @@ Start with:
 make up P=stream
 docker compose --profile stream ps
 ```
+
+The producer, consumer, topic setup and registry client live in `streaming/`.
+Your decisions live in `streaming/config.py`.
 
 ## What you will build
 
@@ -53,6 +54,27 @@ docker compose --profile stream ps
    change the registry rejects and why.
 6. Kill the broker mid-produce and describe exactly which events may be
    duplicated or lost under your settings.
+
+## Your task
+
+Edit `streaming/config.py`, then run:
+
+```bash
+python streaming/run.py reset
+python streaming/run.py setup
+python streaming/run.py produce
+make check M=4
+```
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `PARTITION_COUNT` | `1` | no consumer parallelism |
+| `MESSAGE_KEY` | `None` | a user's events are split across partitions |
+| `ACKS` | `"1"` | the leader can acknowledge data it later loses |
+| `ENABLE_IDEMPOTENCE` | `False` | a producer retry duplicates records |
+| `AUTO_COMMIT` | `True` | offsets commit before the sink write |
+| `SCHEMA_COMPATIBILITY` | `"NONE"` | a field rename is accepted silently |
+| `SINK_IDEMPOTENT` | `False` | a replay doubles the sink |
 
 ## Decisions to make yourself
 

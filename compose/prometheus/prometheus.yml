@@ -1,20 +1,32 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    environment: lab
+
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+        labels:
+          module: "08"
+          component: prometheus
 
-  # Module 8 adds the lab targets. They are listed here, commented out, so the
-  # learner has to decide what is worth scraping and what the labels mean.
-  #
-  # - job_name: decision-api
-  #   metrics_path: /metrics
-  #   static_configs:
-  #     - targets: ["api:8000"]
-  #
-  # - job_name: kafka-connect
-  #   static_configs:
-  #     - targets: ["kafka-connect:8083"]
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          module: "07"
+          component: decision-api
+
+  - job_name: exporter
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["exporter:9101"]
+        labels:
+          module: "08"
+          component: lab-exporter

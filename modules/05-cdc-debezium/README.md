@@ -1,9 +1,6 @@
 # Module 5 — CDC with Debezium
 
-**Time:** 3–4 hours. **Profile:** `stream` + `core`. **Status:** scaffold.
-
-> Kafka Connect with the Debezium PostgreSQL connector is wired but no
-> connector, topic, or check exists yet.
+**Time:** 3–4 hours. **Profile:** `stream` + `core`.
 
 ## Goal
 
@@ -25,8 +22,10 @@ By the end you should have:
 - Postgres 18.6 with the application schema and 2,000 seeded users.
 - Debezium Connect 3.7.0.Final on <http://localhost:8083>.
 - Kafka 4.4.0 and Apicurio Registry from module 4.
-- The Postgres init scripts create the app database, but logical replication is
-  not enabled. Changing `wal_level` requires a Postgres restart.
+- Postgres starts with `wal_level=logical`, `max_wal_senders=10` and
+  `max_replication_slots=10`, so the connector can create its slot.
+- `cdc/run.py` has `reset`, `setup` and `consume` commands. The sink tables
+  are `cdc_users` and `cdc_roles` in the application database.
 - `make reset` destroys the volume, so you can start from a clean snapshot.
 
 ## What you will build
@@ -42,6 +41,25 @@ By the end you should have:
    not a row with nulls; it is a compaction marker.
 6. Add a column to `users` and observe the schema change event. Decide whether
    the consumer can tolerate it.
+
+## Your task
+
+Edit `cdc/config.py`, then run:
+
+```bash
+python cdc/run.py reset
+python cdc/run.py setup
+python cdc/run.py consume
+make check M=5
+```
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `SNAPSHOT_MODE` | `no_data` | the target starts empty |
+| `INCLUDE_TABLES` | `public.users` | role changes never reach the sink |
+| `EMIT_TOMBSTONES` | `False` | a consumer cannot tell delete from empty |
+| `SINK_UPSERT` | `False` | updates are ignored |
+| `APPLY_DELETES` | `False` | deleted users stay active |
 
 ## Decisions to make yourself
 

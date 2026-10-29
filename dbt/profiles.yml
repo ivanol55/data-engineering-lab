@@ -1,0 +1,14 @@
+lab:
+  target: trino
+  outputs:
+    trino:
+      type: trino
+      method: none
+      user: "{{ env_var('TRINO_USER', 'lab') }}"
+      # Inside the Compose network Trino listens on 8080. The host port in
+      # .env is for your laptop, not for a container.
+      host: "{{ env_var('DBT_TRINO_HOST', 'trino') }}"
+      port: "{{ env_var('DBT_TRINO_PORT', '8080') | int }}"
+      database: iceberg
+      schema: analytics
+      threads: 4

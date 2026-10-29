@@ -1,10 +1,6 @@
 # Module 3 — Orchestration with Dagster
 
-**Time:** 2–3 hours. **Profile:** `core` + `orchestration`. **Status:** scaffold.
-
-> The Dagster webserver and daemon start from a custom image and load a
-> placeholder asset. Schedules, real assets, exercises, and checks are not
-> written yet.
+**Time:** 2–3 hours. **Profile:** `core` + `orchestration`.
 
 ## Goal
 
@@ -22,17 +18,16 @@ By the end you should have:
 
 ## What already exists
 
-- `orchestration/definitions.py` defines one asset, `fixture_inventory`, which
-  counts the generated fixtures. It proves the code location and the
-  Postgres-backed instance storage work.
+- `orchestration/definitions.py` defines the asset graph. It already runs, but
+  the learner decisions in `orchestration/config.py` are wrong on purpose.
 - `orchestration/dagster.yaml` stores runs in the `dagster` Postgres database
   and disables telemetry, so the lab stays offline.
-- `orchestration/workspace.yaml` loads the definitions from the image.
-- `make up P=core,orchestration` builds the image and starts the webserver on
+- `orchestration/workspace.yaml` loads `/workspace/orchestration/definitions.py`,
+  so edits are visible after a code-location reload.
+- `make up P=orchestration` builds the image and starts the webserver on
   <http://localhost:3002> and the daemon.
-- The repo is mounted read-only at `/workspace`; fixtures are visible there.
-  The image is rebuilt on `make up`, so edit `orchestration/definitions.py` and
-  restart the profile.
+- The repo is mounted read-only at `/workspace`; dlt state and dbt scratch
+  files are redirected to `/tmp` inside the container.
 
 ## What you will build
 
@@ -48,6 +43,22 @@ By the end you should have:
 6. A failure path: make an asset fail, confirm the downstream assets do not
    run, and confirm the run is marked failed in the UI.
 
+## Your task
+
+Edit `orchestration/config.py`. The graph is already wired; the values decide
+whether it is trustworthy:
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `PARTITION_TIMEZONE` | `America/New_York` | partitions drift around DST |
+| `RETRY_MAX_ATTEMPTS` | `0` | transient failures kill the run |
+| `EVENT_PARTITION_MODE` | `run_date` | a backfill reads today's file |
+| `ENABLE_ASSET_CHECKS` | `False` | an incomplete partition looks healthy |
+
+Use `python modules/01-batch-ingestion/exercises/run.py events --date
+2026-09-03` to see the partition-aware loader the asset calls. Then run
+`make check M=3`.
+
 ## Decisions to make yourself
 
 | Decision | Why it is easy to get wrong |
@@ -61,7 +72,7 @@ By the end you should have:
 
 ## Done when
 
-- The placeholder asset materialises and appears in the Dagster UI.
+- The asset graph materialises and appears in the Dagster UI.
 - The daily graph runs end to end from a clean core profile.
 - A forced failure stops downstream assets and shows a failed run.
 - A one-day backfill changes only that day's partition.

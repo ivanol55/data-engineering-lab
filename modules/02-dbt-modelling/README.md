@@ -1,9 +1,6 @@
 # Module 2 — dbt modelling
 
-**Time:** 3–4 hours. **Profile:** `core` + `tools`. **Status:** scaffold.
-
-> This README is the module contract. The `dbt/` project, exercises, and checks
-> are not written yet. Do not expect `make check M=2` to pass.
+**Time:** 3–4 hours. **Profile:** `core` + `tools`.
 
 ## Goal
 
@@ -27,25 +24,40 @@ By the end you should have:
 
 - `raw.users`, `raw.login_events`, `raw.threat_intel` in Iceberg, written by
   module 1.
+- The `dbt/` project: staging, intermediate and mart models, schema tests,
+  and two singular tests. The SQL is written; the four learner decisions are
+  in `modules/02-dbt-modelling/exercises/config.py`.
+- `modules/02-dbt-modelling/exercises/run.py` passes those decisions to dbt as
+  `--vars`, so you never edit the models to change the strategy.
 - Trino at `trino:8080` with the `iceberg` catalog. dbt talks to Trino through
   `dbt-trino`, already installed in the tools image.
 - `make query Q=...` and `make duckdb Q=...` for checking results by hand.
 
-## What you will build
+## Your task
 
-1. A `dbt/` project with a `profiles.yml` that uses environment variables, not
-   committed credentials.
-2. Staging models with explicit column types and `not_null` / `unique` tests on
-   the grain you chose.
-3. An incremental `fct_login_events` model. Decide the cursor, the unique key,
-   and what happens when a late event arrives.
-4. A user dimension. Decide whether history matters; if it does, implement
-   SCD2 and explain how `valid_from`/`valid_to` interact with event time.
-5. A threat-intel join that does not double-count revisions and does not match
-   an indicator outside its validity window.
-6. Tests that fail when the grain is wrong: duplicate event ids, orphan
-   `user_id`s, intel rows whose `valid_from > valid_to`, and events before a
-   user existed.
+Load module 1 first, then change the four values in
+`modules/02-dbt-modelling/exercises/config.py`:
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `FCT_INCREMENTAL_STRATEGY` | `"append"` | a second build duplicates every fact row |
+| `FCT_UNIQUE_KEY` | `"event_id"` | the merge needs the grain key; this one is already right |
+| `INTEL_JOIN_MODE` | `"indicator_only"` | revised indicators fan out one event into many rows |
+| `FCT_LATE_WINDOW_DAYS` | `0` | an event that arrives after the cursor is dropped |
+
+The reference values are `"merge"`, `"event_id"`, `"latest_valid"` and `2`.
+Build with the wrapper, then run the check:
+
+```bash
+make up P=core,tools
+docker compose --profile tools run --rm tools \
+  python modules/02-dbt-modelling/exercises/run.py build
+make check M=2
+```
+
+The models, tests and macros are already written. Read them while you decide:
+the point is the grain, the incremental key and the intel window, not typing
+SQL.
 
 ## Decisions to make yourself
 
@@ -58,7 +70,7 @@ By the end you should have:
 | SCD2 vs overwrite | Overwriting loses the user's status at the time of the login, which is exactly the feature a risk model needs |
 | Tests | A model can be syntactically valid and still have the wrong grain |
 
-## Useful commands (once the project exists)
+## Useful commands
 
 ```bash
 make up P=core,tools
@@ -75,7 +87,7 @@ make query Q='SELECT count(*) FROM iceberg.marts.fct_login_events'
   historical fact rows.
 - The intel join returns at most one indicator per event and respects
   `valid_from`/`valid_to`.
-- `make check M=2` exists and fails on `main`, passes on `solutions`.
+- `make check M=2` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

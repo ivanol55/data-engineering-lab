@@ -1,10 +1,6 @@
 # Module 7 — Decision service
 
-**Time:** 3–4 hours. **Profile:** `serving` + `stream`. **Status:** scaffold.
-
-> The FastAPI process and Valkey start with the `serving` profile. `/health`
-> and `/ready` work; `/decide` returns 501 on purpose. No rules, exercises, or
-> checks exist yet.
+**Time:** 3–4 hours. **Profile:** `serving` + `stream`.
 
 ## Goal
 
@@ -25,26 +21,55 @@ By the end you should have:
 
 ## What already exists
 
-- `images/api/main.py`: FastAPI, `/health`, `/ready`, and a `/decide` that
-  raises 501. `redis` and `psycopg` are installed.
+- `images/api/main.py`: FastAPI with `/health`, `/ready`, `/metrics` and a
+  working `/decide`. The I/O, timeouts, idempotency cache and decision log are
+  wired.
+- `images/api/rules.py`: the pure rules. The first matching rule wins.
+- `images/api/config.py`: the learner decisions. They are wrong on purpose.
 - Valkey 9.0.7 with append-only persistence.
 - The batch tables in Iceberg and, after module 6, streaming features in
   Valkey.
-- Kafka for the decision log.
+- Kafka for the decision log. The API publishes one event per decision.
+- Lab-only fault injection: send `X-Lab-Fail-Dependency: postgres` or
+  `valkey` to exercise the fail path without stopping a container.
 
 ## What you will build
 
-1. Replace the 501 with a rule pipeline. Start with three rules: deleted or
-   disabled user, source IP on the current intel list, and impossible travel.
-2. Define the feature contract: which features come from Valkey, which from
-   Postgres, and how old each may be.
-3. Implement a cold-cache path. A missing key is not "no risk"; decide whether
-   to compute on demand, fall back to the batch table, or deny.
-4. Add a dependency timeout budget. The total budget must be smaller than the
-   caller's timeout.
-5. Emit one decision event per request to Kafka, including the rule version.
-   A decision without a log is not auditable.
-6. Load-test with a fixed input distribution and report p50/p95/p99.
+1. Decide the missing-user rule. An unknown user is not a low-risk user.
+2. Enable the account-status rule. A deleted or disabled account must never be
+   allowed.
+3. Enable the intel lookup and pick a TTL from the feed cadence. A fresh hit
+   blocks; an expired hit does not.
+4. Keep impossible travel as an MFA challenge, after the hard blocks.
+5. Choose the fail mode for a Postgres or Valkey failure. A security decision
+   should fail closed unless you can justify the opposite.
+6. Turn on the Kafka decision log. The check matches the logged `request_id`
+   with the response.
+7. Measure p95 latency and keep the dependency budget below the caller's
+   timeout.
+
+## Your task
+
+Edit `images/api/config.py`, rebuild the image, and run the check:
+
+```bash
+make build-api
+make up P=serving
+make check M=7
+```
+
+| Setting | Wrong value | What it breaks |
+|---|---|---|
+| `MISSING_USER_DECISION` | `"allow"` | an unknown user is treated as low risk |
+| `CHECK_ACCOUNT_STATUS` | `False` | deleted and suspended accounts are allowed |
+| `CHECK_INTEL` | `False` | a current indicator is ignored |
+| `INTEL_TTL_SECONDS` | `86_400` | a stale indicator blocks for a day |
+| `FAIL_MODE` | `"allow"` | a dependency outage opens the door |
+| `DECISION_LOG_ENABLED` | `False` | decisions are fast and unauditable |
+
+The reference TTL is 3600 seconds. The rules live in `images/api/rules.py`;
+the config values decide which rules are active and what happens when data is
+missing.
 
 ## Decisions to make yourself
 
@@ -70,13 +95,13 @@ curl -s -X POST http://localhost:8001/decide \
 
 ## Done when
 
-- `/decide` returns a decision and a reason for every fixture event.
-- A deleted user is never allowed.
-- An intel hit inside its validity window is blocked or challenged; an expired
-  hit is not.
-- Stopping Valkey produces the documented fail mode, not a hang.
+- `/decide` returns a decision and a reason for every request.
+- A deleted or suspended user is never allowed, and neither is an unknown one.
+- An intel hit inside its validity window is blocked; an expired hit is not.
+- A Postgres or Valkey failure produces the documented fail mode, not a hang.
 - Decision events appear on Kafka with the same request id as the response.
-- `make check M=7` exists and fails on `main`, passes on `solutions`.
+- p95 latency stays below the caller budget.
+- `make check M=7` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

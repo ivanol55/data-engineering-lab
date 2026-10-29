@@ -15,8 +15,17 @@ from de_lab_generator.model import EVENT_COLUMNS, THREAT_INTEL_COLUMNS
 from . import config
 
 
-def _jsonl_rows(directory: Path) -> Iterator[dict]:
-    files = sorted(directory.glob("*.jsonl"))
+def _jsonl_rows(directory: Path, event_date: str | None = None) -> Iterator[dict]:
+    if event_date is None:
+        files = sorted(directory.glob("*.jsonl"))
+    else:
+        candidate = directory / f"events-{event_date}.jsonl"
+        if not candidate.exists():
+            raise FileNotFoundError(
+                f"no fixture for {event_date}: {candidate} does not exist. "
+                "Run `make fixtures` first."
+            )
+        files = [candidate]
     if not files:
         raise FileNotFoundError(
             f"no JSONL files in {directory}. Run `make fixtures` first."
@@ -89,7 +98,7 @@ def users_resource():
     return users
 
 
-def events_resource():
+def events_resource(event_date: str | None = None):
     kwargs = {
         "name": "login_events",
         "table_format": "iceberg",
@@ -101,7 +110,7 @@ def events_resource():
 
     @dlt.resource(**kwargs)
     def login_events():
-        yield from _jsonl_rows(config.EVENTS_DIR)
+        yield from _jsonl_rows(config.EVENTS_DIR, event_date=event_date)
 
     if config.EVENTS_PARTITION is not None:
         return iceberg_adapter(login_events, partition=config.EVENTS_PARTITION)

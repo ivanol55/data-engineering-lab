@@ -1,0 +1,44 @@
+# Alert rules for the lab.
+#
+# TODO(learner): the thresholds, durations, and runbook links below are
+# placeholders. A rule that can never fire is worse than no rule: it looks like
+# monitoring while hiding every incident. Fix all three before module 8 passes.
+groups:
+  - name: lab-pipeline
+    rules:
+      - alert: RawEventsStale
+        # TODO(learner): 10 years is not a freshness threshold.
+        expr: time() - max(lab_table_max_event_time_seconds{table="raw.login_events"}) > 315360000
+        labels:
+          severity: warning
+          module: "01"
+        annotations:
+          summary: "Raw login events are stale"
+          description: "No new event has arrived in the raw table."
+
+      - alert: KafkaConsumerLagHigh
+        # TODO(learner): choose a lag threshold and a duration. A single sample
+        # is not an incident; a sustained lag is.
+        expr: sum by (group) (lab_kafka_consumer_lag) > 99999999
+        labels:
+          severity: warning
+          module: "04"
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "A consumer group is falling behind the log."
+
+      - alert: DecisionDependencyErrors
+        # TODO(learner): an error rate of 99% is not an alert, it is an outage
+        # you notice by hand. Alert on a small sustained rate instead.
+        expr: |
+          (
+            sum(rate(lab_dependency_errors_total[5m]))
+            /
+            clamp_min(sum(rate(lab_decisions_total[5m])), 0.001)
+          ) > 0.99
+        labels:
+          severity: critical
+          module: "07"
+        annotations:
+          summary: "Decision service dependency errors"
+          description: "The decision service cannot reach a dependency."

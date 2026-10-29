@@ -1,10 +1,6 @@
 # Module 8 — Consistency and governance
 
-**Time:** 3–4 hours. **Profile:** `core` + `stream` + `observability`. **Status:** scaffold.
-
-> Prometheus and Grafana start with the `observability` profile. The dashboard
-> has one panel and no lab targets; metrics, alerts, lineage, and checks are
-> not written yet.
+**Time:** 3–4 hours. **Profile:** `core` + `stream` + `observability`.
 
 ## Goal
 
@@ -26,25 +22,51 @@ By the end you should have:
 
 - Prometheus 3.15.1 and Grafana 13.2.5, provisioned from
   `compose/prometheus/prometheus.yml` and `compose/grafana/provisioning/`.
-- One starter dashboard at `dashboards/lab-overview.json`.
+- `images/exporter/` turns Iceberg table freshness, row counts, Kafka lag and
+  Debezium task state into Prometheus gauges. The exporter is wired; the
+  questions it answers are the module.
+- `compose/prometheus/alerts.yml` has placeholder thresholds that can never
+  fire. You own the thresholds, durations and runbook links.
+- `dashboards/lab-overview.json` has one `sum(up)` panel. You own the panels.
+- `governance/catalogue.yml` and `governance/deletion.md` are placeholders.
 - The API, Kafka, Connect, Trino, and the batch tables from earlier modules.
 - Grafana is anonymous-read by default; the admin password is `labadmin`.
 
 ## What you will build
 
-1. Choose signals. At minimum: max event time per table, row count per load,
-   consumer lag, failed connector tasks, decision p95, and block rate.
-2. Export them. Trino does not expose a Prometheus endpoint by default; decide
-   whether to add an exporter, push from the pipeline, or query on a schedule.
-3. Add Prometheus scrape targets and labels that identify the module and the
-   environment.
-4. Write three alerts with thresholds you can defend: stale raw events, lag
-   above N for M minutes, and decision error rate.
-5. Add a table catalogue: owner, grain, retention, PII columns, and upstream
-   dependencies.
-6. Write the deletion procedure. Deleting a user from Postgres is not enough;
-   events, intel matches, features, and model training rows may all contain the
-   identifier.
+1. Read the exporter. It already emits max event time, row count, consumer
+   lag and failed connector tasks; you do not need to write a second one.
+2. Fix the four alerts in `compose/prometheus/alerts.yml`. Each needs a
+   threshold, a `for:` duration, a severity and a runbook link.
+3. Add panels to `dashboards/lab-overview.json` for freshness, row counts,
+   lag, connector health, decision p95 and block rate.
+4. Fill `governance/catalogue.yml`: owner, grain, retention, PII columns and
+   upstream dependencies for every table.
+5. Write `governance/deletion.md`. Deleting a user from Postgres is not enough;
+   Iceberg snapshots, Kafka segments, Valkey keys and MLflow artifacts may all
+   contain the identifier.
+6. Test one alert by breaking the pipeline on purpose, and record what fired.
+
+## Your task
+
+Start the profiles:
+
+```bash
+make up P=observability
+```
+
+Then edit these four files and run `make check M=8`:
+
+| File | What it must contain |
+|---|---|
+| `compose/prometheus/alerts.yml` | four alerts with bounded thresholds, `for:`, severity and `runbook_url` |
+| `dashboards/lab-overview.json` | panels for freshness, row counts, lag, connector health and decision latency |
+| `governance/catalogue.yml` | every table with owner, grain, retention, PII and upstream |
+| `governance/deletion.md` | scope, procedure, verification and retention across all five systems |
+
+Reference thresholds: 24 hours of event time for `RawEventsStale`, 1,000
+records for `KafkaConsumerLagHigh`, and a 5% dependency error rate for
+`DecisionDependencyErrors`.
 
 ## Decisions to make yourself
 
@@ -67,13 +89,15 @@ open http://localhost:3001
 
 ## Done when
 
-- Prometheus has at least three lab targets and all are `UP`.
-- Grafana shows freshness, lag, and decision latency from real data.
-- Each alert fires in a controlled test and links to a runbook.
-- The catalogue lists every table with an owner and a retention period.
-- The deletion procedure is exercised on a test user and leaves no copies in
-  the paths you listed.
-- `make check M=8` exists and fails on `main`, passes on `solutions`.
+- Prometheus scrapes `prometheus`, `api` and `exporter`, all `UP`.
+- The exporter completes a collection cycle and the API metrics reach
+  Prometheus.
+- The four alerts load, have bounded thresholds, a duration and a runbook.
+- The dashboard queries freshness, row counts, lag, connector health and
+  decision latency.
+- The catalogue covers every table with an owner and a retention period.
+- The deletion procedure covers Postgres, Iceberg, Kafka, Valkey and MLflow.
+- `make check M=8` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

@@ -55,7 +55,7 @@ Open:
 | Kafka (host listener) | `localhost:29092` | `stream` |
 | Kafka Connect (Debezium) | http://localhost:8083 | `stream` |
 | Apicurio Registry | http://localhost:8086 | `stream` |
-| Kafbat UI | http://localhost:8081 | `stream` |
+| Kafbat UI | http://localhost:8087 | `stream` |
 | Flink UI | http://localhost:8082 | `flink` |
 | Dagster | http://localhost:3002 | `orchestration` |
 | Grafana | http://localhost:3001 | `observability` |
@@ -72,12 +72,12 @@ and `8888` collisions.
 make up P=core                     # start one or more profiles
 make up P=core,tools               # tools image for ad-hoc Python
 make up P=all                      # the whole stack (needs ~6-8 GB)
-make build                         # build the four local images
+make build                         # build the six local images
 make down                          # stop this project
 make reset                         # stop and DELETE all lab volumes and state
 make doctor                        # environment + health checks
 make check M=1                     # behavioural checks for module 1
-make check-all                     # modules that have checks (0 and 1)
+make check-all                     # modules 0-9, in order
 make load                          # module 1: load all three sources
 make load-users
 make load-threat-intel
@@ -118,18 +118,19 @@ so a single module cannot take the machine down; details are in `DECISIONS.md`.
 |---|---|---|---|
 | 0 | Environment and architecture | `core` | complete |
 | 1 | Batch ingestion into the lakehouse | `core`, `tools` | complete |
-| 2 | dbt modelling | `core`, `tools` | scaffold (README only) |
-| 3 | Orchestration with Dagster | `core`, `orchestration` | scaffold (README only) |
-| 4 | Kafka and schemas | `stream` | scaffold (README only) |
-| 5 | CDC with Debezium | `stream`, `core` | scaffold (README only) |
-| 6 | Flink stream processing | `stream`, `flink`, `serving` | scaffold (README only) |
-| 7 | Decision service | `serving`, `stream` | scaffold (README only) |
-| 8 | Consistency and governance | `core`, `stream`, `observability` | scaffold (README only) |
-| 9 | Modelling | `ml`, `core` | scaffold (README only) |
+| 2 | dbt modelling | `core`, `tools` | complete |
+| 3 | Orchestration with Dagster | `core`, `orchestration` | complete |
+| 4 | Kafka and schemas | `stream` | complete |
+| 5 | CDC with Debezium | `stream`, `core` | complete |
+| 6 | Flink stream processing | `stream`, `flink`, `serving` | complete |
+| 7 | Decision service | `serving`, `stream` | complete |
+| 8 | Consistency and governance | `core`, `stream`, `observability` | complete |
+| 9 | ML scoring | `ml`, `core` | complete |
 
-Each module has `README.md`, `hints.md`, `drills.md`, `stretch.md`, and an
-`exercises/` directory. Modules 2-9 currently contain no exercises or checks;
-their services start, but the module work is not implemented.
+Each module has `README.md`, `hints.md`, `drills.md`, `stretch.md`, an
+`exercises/` directory and a pytest check under `checks/module_XX/`. Modules
+0-1 are committed on both branches; modules 2-9 are implemented as learner
+gaps with reference solutions on the `solutions` branch.
 
 ## How learner gaps work
 

@@ -9,10 +9,12 @@ RUN pip install --no-cache-dir \
     fastapi==0.162.0 \
     uvicorn==0.54.0 \
     redis==8.1.0 \
-    psycopg[binary]==3.3.6
+    psycopg[binary]==3.3.6 \
+    confluent-kafka==2.16.1 \
+    prometheus-client==0.26.0
 
 WORKDIR /app
-COPY main.py /app/main.py
+COPY main.py rules.py config.py /app/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
