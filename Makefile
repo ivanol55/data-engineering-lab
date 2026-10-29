@@ -99,7 +99,7 @@ check: .env
 	    $(MAKE) --no-print-directory build-orchestration; \
 	    $(MAKE) --no-print-directory up P=core; \
 	    runner="--profile core --profile orchestration run --rm --entrypoint python dagster-webserver"; \
-	    pytest_cmd="python -m pytest" ;; \
+	    pytest_cmd="-m pytest" ;; \
 	  4) \
 	    $(MAKE) --no-print-directory up P=stream; \
 	    runner="--profile tools run --rm tools"; \
