@@ -40,7 +40,7 @@ docker compose --profile stream ps
 The producer, consumer, topic setup and registry client live in `streaming/`.
 Your decisions live in `streaming/config.py`.
 
-## What you will build
+## What the stream does
 
 1. Create the topic. Choose partitions based on the consumer parallelism you
    actually need, not on a round number.
@@ -105,7 +105,7 @@ curl -s http://localhost:8086/apis/registry/v3/system/info
 - The schema registry rejects an incompatible change and accepts a compatible
   one.
 - A consumer restart resumes from the committed offset, and lag returns to zero.
-- `make check M=4` exists and fails on `main`, passes on `solutions`.
+- `make check M=4` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

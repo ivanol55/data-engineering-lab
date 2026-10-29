@@ -22,6 +22,7 @@ help:
 	@echo "  make reset                  stop and delete volumes + lab state"
 	@echo "  make doctor                 check Docker, RAM, ports and health"
 	@echo "  make check M=1              run module 1 behavioural checks"
+	@echo "  make check-all              run every module check in order"
 	@echo "  make load                   module 1: load all three sources"
 	@echo "  make query Q='SELECT 1'     run SQL in Trino"
 	@echo "  make duckdb Q='SELECT 1'    run SQL in DuckDB over Iceberg"

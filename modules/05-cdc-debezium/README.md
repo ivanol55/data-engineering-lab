@@ -28,7 +28,7 @@ By the end you should have:
   are `cdc_users` and `cdc_roles` in the application database.
 - `make reset` destroys the volume, so you can start from a clean snapshot.
 
-## What you will build
+## What the CDC pipeline does
 
 1. Configure Postgres for logical replication (`wal_level=logical`, a
    replication slot, and enough `max_wal_senders`). Restart the service.
@@ -90,7 +90,7 @@ docker compose --profile stream exec kafka \
   to the target exactly once.
 - A schema change is either handled or fails loudly; it is not silently
   dropped.
-- `make check M=5` exists and fails on `main`, passes on `solutions`.
+- `make check M=5` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

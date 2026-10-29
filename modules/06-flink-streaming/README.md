@@ -28,7 +28,7 @@ By the end you should have:
 - The batch tables in Iceberg for a correctness comparison: a streaming result
   should agree with the batch result for the same window.
 
-## What you will build
+## What the job does
 
 1. A source with event-time timestamps and a watermark strategy. Justify the
    out-of-orderness bound using the generator's behaviour.
@@ -87,7 +87,7 @@ docker compose --profile flink logs -f flink-taskmanager
 - The job is `RUNNING` and its output windows are keyed by event time.
 - The streaming result for a completed window matches the batch aggregation.
 - Checkpoints complete, and the state TTL and allowed lateness are non-zero.
-- `make check M=6` exists and fails on `main`, passes on `solutions`.
+- `make check M=6` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 

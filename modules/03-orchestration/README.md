@@ -29,7 +29,7 @@ By the end you should have:
 - The repo is mounted read-only at `/workspace`; dlt state and dbt scratch
   files are redirected to `/tmp` inside the container.
 
-## What you will build
+## What the graph does
 
 1. Assets that call the module 1 pipeline (`run.py users|events|threat-intel`)
    and materialise the module 2 dbt models. Use `deps`, not sleeps.
@@ -76,7 +76,7 @@ Use `python modules/01-batch-ingestion/exercises/run.py events --date
 - The daily graph runs end to end from a clean core profile.
 - A forced failure stops downstream assets and shows a failed run.
 - A one-day backfill changes only that day's partition.
-- `make check M=3` exists and fails on `main`, passes on `solutions`.
+- `make check M=3` fails on `main`, passes on `solutions`.
 
 ## Failure modes to watch
 
