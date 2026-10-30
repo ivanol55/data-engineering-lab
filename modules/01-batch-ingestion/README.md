@@ -332,3 +332,9 @@ make duckdb Q='SELECT outcome, count(*) FROM login_events GROUP BY 1'
 - **Composite key omitted** → threat-intel revisions become duplicate rows.
 - **Reset only locally** → dlt restores pipeline state from the destination.
   `run.py reset` deletes both the local state and the `raw` S3 prefix.
+
+## Using AI on this module
+
+Ask AI to explain dlt's write dispositions or to review a table contract. Decide
+the primary key and the write disposition yourself: they are what make the load
+idempotent, and a wrong choice still exits successfully.
