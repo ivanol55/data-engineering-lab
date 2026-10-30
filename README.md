@@ -24,6 +24,20 @@ Postgres app DB ─────────┘
 
 `ARCHITECTURE.md` has the full diagram with modules marked.
 
+## New to data engineering?
+
+You do not need prior experience with data warehouses, Kafka, or machine
+learning. Start with:
+
+- [`docs/LEARNING_PATH.md`](docs/LEARNING_PATH.md) — how to work through the
+  course, what the branches mean, and how to read a failing check;
+- [`docs/GLOSSARY.md`](docs/GLOSSARY.md) — every term, in plain language, with
+  the lab's example.
+
+Each module begins with a “Before you start” section that teaches the idea
+before asking you to change anything. The reference answer is shown next to
+each decision; the goal is to understand why it is correct, not to guess.
+
 ## Prerequisites
 
 - Linux or macOS, 8 GB of RAM available to Docker (16 GB recommended for the
@@ -65,6 +79,20 @@ Open:
 
 Ports are configurable in `.env`. Defaults avoid the common `3000`, `8080`,
 and `8888` collisions.
+
+## How a module works
+
+Every module follows the same pattern:
+
+1. **Before you start** — the problem and the words, in plain language.
+2. **Guided walkthrough** — commands with the output you should expect.
+3. **The choice, explained** — the wrong default, the reference answer, and the
+   reason.
+4. **Check yourself** — short questions with answers you can reveal.
+5. **Drills and stretch** — break it on purpose, then extend it.
+
+The checks are the executable part of the lesson. On `main` they fail; on
+`solutions` they pass.
 
 ## Commands
 

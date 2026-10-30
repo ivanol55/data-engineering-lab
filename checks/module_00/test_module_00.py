@@ -137,8 +137,14 @@ def test_answers_are_filled_in():
     assert set(sections) == set(range(1, QUESTIONS + 1)), (
         f"answers.md must contain Q1..Q{QUESTIONS}; found {sorted(sections)}"
     )
-    for number, answer in sections.items():
-        assert len(answer.strip()) >= MIN_ANSWER_CHARS, (
+    for number, section in sections.items():
+        marker = "### Your answer"
+        assert marker in section, (
+            f"Q{number} has no {marker!r} section; put your answer below the "
+            "question guidance"
+        )
+        answer = section.split(marker, 1)[1].strip()
+        assert len(answer) >= MIN_ANSWER_CHARS, (
             f"Q{number} is too short; explain the trade-off, not just the name"
         )
         lowered = answer.lower()

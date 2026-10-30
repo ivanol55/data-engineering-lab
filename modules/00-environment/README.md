@@ -1,6 +1,6 @@
 # Module 0 — The lab and its contracts
 
-**Time:** 45–60 minutes. **Profile:** `core`.
+**Time:** 60–90 minutes. **Profile:** `core`.
 
 ## What you are building towards
 
@@ -17,6 +17,33 @@ serve decisions, and score risk.
 You do not need any cloud account. Every component is local, open source, and
 runs in Docker Compose. After the first image pull and tools-image build, the
 lab runs offline.
+
+## Before you start
+
+You do not need to know these words yet. This is the minimum needed for module
+0; the full list is in [`docs/GLOSSARY.md`](../../docs/GLOSSARY.md).
+
+| Word | Plain meaning | In this lab |
+|---|---|---|
+| **System of record** | The authoritative copy of a fact | Postgres owns users and roles |
+| **OLTP** | A database built for small, frequent reads and writes | Postgres handles sign-ups, updates, deletes |
+| **OLAP** | A system built for large scans and aggregations | Trino and DuckDB answer analytical queries |
+| **Object storage** | A service that stores files by key | SeaweedFS stores Parquet files under `s3://lakehouse/` |
+| **Table format** | Metadata that turns a folder of files into a table | Iceberg adds schemas, snapshots, and partitions |
+| **Catalog** | The address book for tables | Lakekeeper maps `iceberg.raw.users` to Iceberg metadata |
+| **Batch** | Processing a group of data on a schedule | Module 1 loads seven daily files |
+| **Stream** | Processing events as they arrive | Modules 4–6 use Kafka and Flink |
+
+The mental model is a library:
+
+- **SeaweedFS** is the building full of shelves (files).
+- **Iceberg** is the catalogue card that says which books belong to which
+  collection and which edition is current.
+- **Lakekeeper** is the librarian who knows where the catalogue cards are.
+- **Trino** is the reading room where you ask questions.
+
+A folder of Parquet files is not a table. The table format is what makes the
+files queryable, versioned, and safe to update.
 
 ## The core profile
 
@@ -49,51 +76,142 @@ lab runs offline.
 container health, and the core endpoints. It cannot prove that a pipeline is
 correct; that is what the module checks are for.
 
-## Exercise
+## Guided walkthrough
 
-1. Copy the environment and start the core profile:
+Follow the steps in order. Each step tells you what to run, what you should see,
+and what it proves.
 
-   ```bash
-   cp .env.example .env     # only if .env does not exist
-   make up P=core
-   make doctor
-   ```
+### Step 1 — Start the core profile
 
-2. Look at the application data. Notice the identity columns, the statuses, and
-   the users with `deleted_at` set:
+```bash
+cp .env.example .env     # only if .env does not exist
+make up P=core
+make doctor
+```
 
-   ```bash
-   make psql
-   ```
+**You should see:** containers for Postgres, SeaweedFS, Lakekeeper, Trino, and
+the one-shot init jobs become healthy. `make doctor` ends with
+`all checks passed`.
 
-   ```sql
-   SELECT account_status, count(*) FROM users GROUP BY 1 ORDER BY 1;
-   SELECT count(*) FROM users WHERE deleted_at IS NOT NULL;
-   SELECT role_id, count(*) FROM users GROUP BY 1 ORDER BY 1;
-   ```
+**What this proves:** the plumbing is up. A healthy container is not a correct
+pipeline; it only means the process is running.
 
-3. Query Postgres through Trino, then list the Iceberg namespaces:
+### Step 2 — Look at the application data
 
-   ```bash
-   make query Q='SELECT count(*) FROM postgresql.public.users'
-   make query Q='SHOW SCHEMAS IN iceberg'
-   ```
+```bash
+make psql
+```
 
-4. Generate the deterministic fixtures and check they are stable:
+Then run:
 
-   ```bash
-   make fixtures
-   make generator ARGS="plan --days 2"
-   ```
+```sql
+SELECT account_status, count(*) FROM users GROUP BY 1 ORDER BY 1;
+SELECT count(*) FROM users WHERE deleted_at IS NOT NULL;
+SELECT role_id, count(*) FROM users GROUP BY 1 ORDER BY 1;
+```
 
-5. Read `ARCHITECTURE.md` and `DECISIONS.md`. Then answer the eight questions in
-   `answers.md`. Replace every `TODO(learner)` with a short, specific answer.
+**You should see:** 2,000 users, 5 roles, and 42 rows with a non-null
+`deleted_at`. The statuses are `active`, `disabled`, `locked`, and `suspended`.
 
-6. Run the checks:
+**What this proves:** Postgres is the system of record, and it already contains
+the messy cases the later modules must handle: disabled accounts, soft deletes,
+and role assignments.
 
-   ```bash
-   make check M=0
-   ```
+Exit `psql` with `\q`.
+
+### Step 3 — Query Postgres through Trino
+
+```bash
+make query Q='SELECT count(*) FROM postgresql.public.users'
+make query Q='SHOW SCHEMAS IN iceberg'
+```
+
+**You should see:** `2000` from the first query, and a `raw` schema from the
+second.
+
+**What this proves:** Trino can read two different systems with one SQL
+dialect. The Postgres catalog is a live view; the Iceberg catalog is a table
+format managed by Lakekeeper.
+
+### Step 4 — Generate and inspect the fixtures
+
+```bash
+make fixtures
+make generator ARGS="plan --days 2"
+```
+
+**You should see:** seven JSONL files under `fixtures/events/`, and a plan that
+shows the daily event and attack counts.
+
+**What this proves:** the input data is deterministic. The same seed and start
+date produce the same event ids on every machine, which makes the checks
+repeatable.
+
+### Step 5 — Read the architecture
+
+Open `ARCHITECTURE.md` and `DECISIONS.md`. You do not need to memorise them.
+Look for:
+
+- which component owns which kind of state;
+- why the lab uses SeaweedFS instead of MinIO;
+- why Lakekeeper advertises `http://lakekeeper:8181` instead of `localhost`.
+
+### Step 6 — Write the model in your own words
+
+Open `modules/00-environment/answers.md`. Each question has:
+
+- **What this question is really asking** — the idea behind it;
+- **What to cover** — the points a good answer includes;
+- **A sentence starter** — a way to begin if the blank page is intimidating.
+
+Replace the `TODO(learner)` line with a short answer. You do not need an essay;
+three or four sentences that use the key terms are enough. If you are stuck,
+open the matching hint in `hints.md`.
+
+### Step 7 — Run the check
+
+```bash
+make check M=0
+```
+
+**You should see:** seven passing tests once the answers are filled in.
+
+**What this proves:** the environment is healthy, the fixtures are
+deterministic, and you can explain the system you are about to build on.
+
+## Check yourself
+
+These are not graded. Try to answer before opening the hint.
+
+<details>
+<summary>Why not query Postgres directly from every dashboard?</summary>
+
+Because analytical scans compete with application traffic, and because the
+dashboard would need to understand the application schema. A lakehouse copy
+isolates the load and gives you a stable, queryable history. The trade-off is
+freshness: the copy is only as new as the last load.
+
+</details>
+
+<details>
+<summary>What is the difference between SeaweedFS and Lakekeeper?</summary>
+
+SeaweedFS stores bytes (Parquet files, metadata files). Lakekeeper stores the
+address book: which table exists, which metadata file is current, and what
+schema it has. You can lose the catalog and still have the files, but you
+cannot query them as tables until the catalog is rebuilt.
+
+</details>
+
+<details>
+<summary>Why does the lab use a deterministic generator?</summary>
+
+So a check can say “there are 14,000 events and 8% are attacks” and mean it on
+every machine. Random data would make failures hard to reproduce and would turn
+every exercise into a debugging session about the fixture instead of the
+pipeline.
+
+</details>
 
 ## Done when
 
@@ -106,7 +224,7 @@ correct; that is what the module checks are for.
 
 - The tools image is built locally (`de-lab-tools:local`). The first build needs
   PyPI; later runs use the cached image. This is the one documented exception to
-  "pull-only" startup.
+  “pull-only” startup.
 - Host ports are configurable in `.env`. Defaults: Postgres `5432`, SeaweedFS
   `8333`, Lakekeeper `8181`, Trino `8085`.
 - Do not put real credentials in `.env`. Everything in this repo is local-only.
