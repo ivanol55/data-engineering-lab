@@ -86,8 +86,8 @@ retry safe because …”
 ### Your answer
 
 At-least-once means a record is never silently lost, but a retry after a crash
-can deliver the same record twice. If the sink writes with a stable primary
-key and a merge or upsert, the second delivery replaces the same logical row
+can deliver the same record twice. If the sink writes with a stable primary key
+and a merge or upsert, the second delivery replaces the same logical row
 instead of adding a duplicate, so running the load twice leaves the table in
 the same state. That is why the key matters more than the delivery guarantee:
 an append with no key turns every retry into a new row.
