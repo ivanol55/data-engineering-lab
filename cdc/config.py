@@ -12,22 +12,22 @@ CONNECT_URL = "http://kafka-connect:8083"
 
 # TODO(learner): "no_data" registers the connector but never copies the
 # existing 2,000 users. Use "initial" for the first snapshot.
-SNAPSHOT_MODE = "no_data"
+SNAPSHOT_MODE = "initial"
 
 # TODO(learner): roles change rarely, but a role rename still matters to the
 # consumer. Include both tables.
-INCLUDE_TABLES = "public.users"
+INCLUDE_TABLES = "public.users,public.roles"
 
 # TODO(learner): a delete event followed by a null tombstone is the contract.
 # Keep the tombstone.
-EMIT_TOMBSTONES = False
+EMIT_TOMBSTONES = True
 
 # TODO(learner): a retry after a crash must not insert a second copy, and an
 # update must replace the old row. Use an upsert on user_id.
-SINK_UPSERT = False
+SINK_UPSERT = True
 
 # TODO(learner): if the sink ignores deletes, deleted users stay active.
-APPLY_DELETES = False
+APPLY_DELETES = True
 
 # Internal names. Changing these requires a fresh slot and a clean sink.
 SLOT_NAME = "de_lab_cdc"

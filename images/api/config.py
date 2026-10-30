@@ -24,26 +24,26 @@ VALKEY_TIMEOUT_SECONDS = 0.5
 ALLOW_FAULT_INJECTION = os.getenv("LAB_ALLOW_FAULT_INJECTION", "1") == "1"
 
 # TODO(learner): an unknown user is not a low-risk user. Choose "block".
-MISSING_USER_DECISION = "allow"
+MISSING_USER_DECISION = "block"
 
 # TODO(learner): a deleted or disabled account must not be allowed. Enable the
 # status check.
-CHECK_ACCOUNT_STATUS = False
+CHECK_ACCOUNT_STATUS = True
 
 # TODO(learner): a source IP on the current intel list must be blocked. Enable
 # the intel lookup.
-CHECK_INTEL = False
+CHECK_INTEL = True
 
 # TODO(learner): intel entries older than this are stale. Pick a TTL that
 # matches the feed cadence (3600 seconds is the reference).
-INTEL_TTL_SECONDS = 86_400
+INTEL_TTL_SECONDS = 3600
 
 # TODO(learner): what should happen when Postgres or Valkey is unreachable?
 # "block" fails closed; "allow" is the wrong default for a security decision.
-FAIL_MODE = "allow"
+FAIL_MODE = "block"
 
 # TODO(learner): decisions must be auditable. Enable the Kafka decision log.
-DECISION_LOG_ENABLED = False
+DECISION_LOG_ENABLED = True
 
 # The decision cache makes a retried request idempotent. Keep it short: a
 # cached decision is only valid while its inputs are.

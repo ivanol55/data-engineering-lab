@@ -13,7 +13,7 @@ WINDOW_MINUTES = 5
 
 # TODO(learner): "processing" makes the result depend on when the job ran.
 # Use "event" so the 2026-09 fixtures produce 2026-09 windows.
-TIME_CHARACTERISTIC = "processing"
+TIME_CHARACTERISTIC = "event"
 
 # TODO(learner): the generator can deliver an event slightly out of order.
 # Five seconds is the observed bound for this feed.
@@ -21,14 +21,14 @@ WATERMARK_SECONDS = 5
 
 # TODO(learner): zero silently drops every event that arrives after its
 # window. Ten seconds keeps the generator's late events.
-ALLOWED_LATENESS_SECONDS = 0
+ALLOWED_LATENESS_SECONDS = 10
 
 # TODO(learner): keyed state with no TTL grows forever. A day matches the
 # feature's usefulness for this lab.
-STATE_TTL_HOURS = 0
+STATE_TTL_HOURS = 24
 
 # TODO(learner): without checkpoints a TaskManager restart loses state and
 # the job cannot recover. Turn this on.
-CHECKPOINTING = False
+CHECKPOINTING = True
 CHECKPOINT_DIR = "file:///opt/flink/checkpoints"
 CHECKPOINT_INTERVAL_MS = 5000

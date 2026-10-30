@@ -1,8 +1,40 @@
 # Table catalogue (module 8).
 #
-# TODO(learner): every table the lab owns needs an owner, a grain, a retention
-# period, its PII columns, and its upstream dependencies. An empty catalogue is
-# not a catalogue: `make check M=8` rejects it.
+# One entry per table the lab owns. `owner` is a team, not a person: a person
+# changes jobs, a team has a rota. `retention_days` is the shortest period that
+# satisfies both the product and the audit requirement. `pii_columns` is the
+# list a deletion request must reach. `upstream` is what breaks this table when
+# it stops.
 version: 1
-owner_team: TODO
-tables: {}
+owner_team: data-platform
+tables:
+  raw.users:
+    owner: identity-platform
+    grain: one row per user, current snapshot
+    retention_days: 365
+    pii_columns: [email, full_name]
+    upstream: [postgres.public.users]
+  raw.login_events:
+    owner: security-analytics
+    grain: one row per login event
+    retention_days: 90
+    pii_columns: [email, source_ip, device_id]
+    upstream: [generator.login_events]
+  raw.threat_intel:
+    owner: security-analytics
+    grain: one row per indicator revision
+    retention_days: 365
+    pii_columns: []
+    upstream: [generator.threat_intel]
+  marts.fct_login_events:
+    owner: security-analytics
+    grain: one row per login event, enriched with user and intel
+    retention_days: 90
+    pii_columns: [email, source_ip, device_id]
+    upstream: [raw.users, raw.login_events, raw.threat_intel]
+  marts.dim_users:
+    owner: identity-platform
+    grain: one row per user, current values
+    retention_days: 365
+    pii_columns: [email, full_name]
+    upstream: [raw.users]

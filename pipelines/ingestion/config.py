@@ -58,26 +58,26 @@ os.environ.setdefault(
 
 # TODO(learner): a snapshot needs a natural key, otherwise a re-run appends a
 # second copy of every user.
-USERS_PRIMARY_KEY = None
-USERS_WRITE_DISPOSITION = "append"
+USERS_PRIMARY_KEY = "user_id"
+USERS_WRITE_DISPOSITION = "merge"
 
 # TODO(learner): decide what happens when `users.deleted_at` becomes non-null.
 # Allowed values: "soft_delete", "hard_delete". "TODO" silently keeps deleted
 # users as active.
-DELETION_POLICY = "TODO"
+DELETION_POLICY = "soft_delete"
 
 # TODO(learner): a backfill followed by yesterday's file must not re-load the
 # whole history. Enable the cursor on `event_time`.
-EVENTS_INCREMENTAL = False
+EVENTS_INCREMENTAL = True
 
 # TODO(learner): partition login events by day. Use
 # `iceberg_partition.day("event_time")` on the solutions branch.
-EVENTS_PARTITION = None
+EVENTS_PARTITION = iceberg_partition.day("event_time")
 
 # TODO(learner): the threat-intel feed revises previous indicators. Without a
 # composite key and merge, revisions become duplicate rows.
-THREAT_INTEL_PRIMARY_KEY = None
-THREAT_INTEL_WRITE_DISPOSITION = "append"
+THREAT_INTEL_PRIMARY_KEY = ["indicator", "valid_from"]
+THREAT_INTEL_WRITE_DISPOSITION = "merge"
 
 USER_COLUMNS = {
     "user_id": {"data_type": "text", "nullable": False},
