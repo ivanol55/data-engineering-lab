@@ -36,8 +36,39 @@ as `--vars`.
                    FROM iceberg.marts.fct_login_events'
    ```
 
-   With `INTEL_JOIN_MODE = "indicator_only"`, `rows > events`: revised
-   indicators fan out.
+   The fixture feed alone happens not to fan out: only one indicator has
+   several revisions, and no event uses it. To see the bug, insert an expired
+   indicator for a day-seven event, rebuild, and count the matches outside the
+   validity window. The check does exactly that:
+
+   ```bash
+   make query Q="
+   INSERT INTO threat_intel (
+     indicator, indicator_type, threat_type, confidence, severity, source,
+     description, valid_from, valid_to, updated_at, generator_version,
+     _dlt_load_id, _dlt_id
+   )
+   SELECT source_ip, 'ip', 'expired_test', 99, 'critical', 'manual',
+          'expired indicator used by the exercise',
+          DATE '2026-09-01', DATE '2026-09-02',
+          TIMESTAMP '2026-09-02 06:00:00 UTC', 'manual', 'manual',
+          'manual-expired'
+   FROM login_events
+   WHERE event_time >= TIMESTAMP '2026-09-07 00:00:00 UTC'
+     AND source_ip NOT IN (SELECT indicator FROM threat_intel)
+   LIMIT 1
+   "
+   ```
+
+   With `INTEL_JOIN_MODE = "indicator_only"`, this returns a positive count:
+
+   ```bash
+   make query Q='SELECT count(*) FROM iceberg.marts.fct_login_events
+                  WHERE intel_hit AND CAST(event_time AS date) > intel_valid_to'
+   ```
+
+   With `"latest_valid"` it returns 0, because the join respects
+   `valid_from` / `valid_to`.
 
 5. Fix the values:
 

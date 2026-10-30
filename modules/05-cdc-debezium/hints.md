@@ -9,8 +9,8 @@ The values live in `cdc/config.py`.
 Postgres needs `wal_level=logical` and enough `max_wal_senders`. The setting is not reloadable; restart the service. Check with `SHOW wal_level` before debugging the connector.
 
 The compose file already starts Postgres with the right settings. Run
-`python cdc/run.py reset` before `setup` so the slot and connector offsets
-start clean.
+`docker compose --profile tools run --rm tools python cdc/run.py reset` before
+`setup` so the slot and connector offsets start clean.
 
 </details>
 

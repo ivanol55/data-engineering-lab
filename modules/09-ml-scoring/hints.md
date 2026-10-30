@@ -1,7 +1,7 @@
 # Module 9 — ML scoring — hints
 
 These are progressive hints, one per hard decision. Open one at a time. The
-decisions live in `ml/config.py`; retrain with `python ml/train.py` or run
+decisions live in `ml/config.py`; retrain inside the MLflow container or run
 `make check M=9`, which trains for you.
 
 <details>

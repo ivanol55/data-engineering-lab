@@ -12,9 +12,11 @@ The job is `flink_jobs/risk_job.py`; the decisions are in
 2. Create the JSON topics and replay the fixtures:
 
    ```bash
-   python flink_jobs/setup.py reset
-   python flink_jobs/setup.py setup
+   docker compose --profile tools run --rm tools python flink_jobs/setup.py reset
+   docker compose --profile tools run --rm tools python flink_jobs/setup.py setup
    ```
+
+   **Expect:** `produced 14000 events to login.events.json`.
 
 3. Submit the job:
 

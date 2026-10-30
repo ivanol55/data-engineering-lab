@@ -11,15 +11,20 @@ The connector, sink and decisions live in `cdc/`.
 2. Reset the connector, replication slot and target tables:
 
    ```bash
-   python cdc/run.py reset
-   python cdc/run.py setup
+   docker compose --profile tools run --rm tools python cdc/run.py reset
+   docker compose --profile tools run --rm tools python cdc/run.py setup
    ```
+
+   **Expect:** `connector users-cdc: RUNNING`.
 
 3. Consume the initial snapshot:
 
    ```bash
-   python cdc/run.py consume
+   docker compose --profile tools run --rm tools python cdc/run.py consume
    ```
+
+   **Expect with the wrong config:** `{'upsert': 0, ...}` and an empty
+   `cdc_users`, because `SNAPSHOT_MODE = "no_data"` skips the existing rows.
 
 4. Compare source and target:
 
@@ -29,6 +34,8 @@ The connector, sink and decisions live in `cdc/`.
    # select count(*) from cdc_users;
    ```
 
+   Exit with `\q`.
+
 5. Make a change in the source and consume it:
 
    ```sql
@@ -36,7 +43,8 @@ The connector, sink and decisions live in `cdc/`.
    where user_id = '00000000-0000-0000-0000-000000000001';
    ```
 
-   Then `python cdc/run.py consume` and check `cdc_users`.
+   Then `docker compose --profile tools run --rm tools python cdc/run.py consume`
+   and check `cdc_users`.
 
 6. Delete the row. The consumer must remove it from `cdc_users` and the topic
    must contain a null-value tombstone for the key.
@@ -50,6 +58,9 @@ The connector, sink and decisions live in `cdc/`.
    | `EMIT_TOMBSTONES` | `True` |
    | `SINK_UPSERT` | `True` |
    | `APPLY_DELETES` | `True` |
+
+   Reset and consume again. **Expect:** `{'upsert': 2005, ...}` and
+   `2000` users plus `5` roles in the target tables.
 
 8. Run `make check M=5`.
 
